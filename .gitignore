@@ -1,3 +1,5 @@
 .ipynb_checkpoints/
 31/
 *.zip
+__pycache__/
+
