@@ -6,6 +6,7 @@ import statsmodels.api as sm
 import statsmodels.stats.api as sms
 import scipy.stats as stats
 import json
+import re
 from sklearn.base import TransformerMixin
 from sklearn.pipeline import Pipeline, make_pipeline
 from functools import reduce
@@ -40,6 +41,44 @@ class Extraction(TransformerMixin):
                 for key,val in d.items():
                     df_copy.loc[index,key] = val
             
+        return df_copy
+
+class ExtractionString(TransformerMixin):
+    def __init__(self,column,new_names = ['race', 'native-country','education','marital-status','relationship']):
+        self.column = column
+        self.new_names = new_names
+        
+    def fit(self,df,y=None):
+        print('-- Extraction of ',self.column)
+        return self
+    
+    def transform(self,df):
+        df_copy = df.copy()
+        
+        for index,row in enumerate(df_copy[self.column]):
+            if not pd.isna(row):
+                values = re.split('\||\n| -- ', row)
+                for i in range(0,len(self.new_names)):
+                    df_copy.loc[index,self.new_names[i]] = re.sub(r"^\s+","", values[i]) 
+            
+        return df_copy
+
+class StringCorrection(TransformerMixin):
+    def __init__(self,columns):
+        self.columns = columns
+        
+    def fit(self,df,y=None):
+        print('-- Correction of ',self.columns)
+        return self
+    
+    def transform(self,df):
+        df_copy = df.copy()
+        
+        for index,row in df_copy.iterrows():
+            for col in self.columns:
+                if not pd.isna(df_copy.loc[index,col]):
+                    df_copy.loc[index,col] = re.sub(r"^\s+","",  df_copy.loc[index,col]).lower()
+
         return df_copy
 
 
@@ -367,8 +406,8 @@ class ReplaceCategoryNanWithModel(TransformerMixin):
             self.replacers[col] = self.replacers[col].fit(newdf)
             
             # encodovanie kategorickych atrinutov na ciselne 
-            self.encoders[col].fit(newdf_x)
-            newdf_x = self.encoders[col].transform(newdf_x)
+            self.encoders[col].fit(self.stringReplacer(newdf_x))
+            newdf_x = self.encoders[col].transform(self.stringReplacer(newdf_x))
             
             
             scores = cross_val_score(self.models[col], 
@@ -404,10 +443,20 @@ class ReplaceCategoryNanWithModel(TransformerMixin):
             # doplnenie do vsetkych riadkov kde su nejake nan hodnoty okrem atributu ktory predikujeme
             newdf_x = self.replacers[col].transform(newdf_x)
             
-            newdf_x = self.encoders[col].transform(newdf_x)
+            newdf_x = self.encoders[col].transform(self.stringReplacer(newdf_x))
 
             prediction = self.models[col].predict(newdf_x)
             df_copy.loc[newdf_x.index,col] = prediction
+        return df_copy
+
+    def stringReplacer(self,df):
+        df_copy = df.copy()
+    
+        for index,row in df_copy.iterrows():
+            for col in df_copy.columns:
+                if not pd.isna(df_copy.loc[index,col]):
+                    df_copy.loc[index,col] = re.sub(r"^\s+","",  df_copy.loc[index,col]).lower()
+
         return df_copy
     
 
